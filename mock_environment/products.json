@@ -1,0 +1,35 @@
+[
+    {
+        "product_id": "P001",
+        "name": "Choco Protein Bar",
+        "brand": "FitFuel",
+        "category": "protein_bar",
+        "ingredients": "Milk protein, cocoa, added sugar, palm oil, emulsifier E471",
+        "protein_g": 20,
+        "added_sugar_g": 12,
+        "price": 120,
+        "available": true
+    },
+    {
+        "product_id": "P002",
+        "name": "Peanut Protein Bar",
+        "brand": "NutriFit",
+        "category": "protein_bar",
+        "ingredients": "Peanuts, milk protein, cocoa, dates",
+        "protein_g": 21,
+        "added_sugar_g": 3,
+        "price": 135,
+        "available": true
+    },
+    {
+        "product_id": "P003",
+        "name": "Classic Protein Bar",
+        "brand": "PowerFood",
+        "category": "protein_bar",
+        "ingredients": "Whey protein, glucose syrup, palm oil, artificial flavor",
+        "protein_g": 19,
+        "added_sugar_g": 10,
+        "price": 110,
+        "available": false
+    }
+]
