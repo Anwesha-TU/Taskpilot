@@ -1,342 +1,234 @@
-# NutriCoach Agentic Worker
+# TaskPilot — Agentic AI Employee Runtime
 
-**An agentic AI system for nutrition-product analysis, constraint-aware recommendations, tool execution, recovery, verification, and human-in-the-loop approval.**
+**From company goals to verified work.**
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![API](https://img.shields.io/badge/API-FastAPI-009688)](https://fastapi.tiangolo.com/)
-[![Backend](https://img.shields.io/badge/Backend-Django-092E20)](https://www.djangoproject.com/)
-[![Tests](https://img.shields.io/badge/Tests-97%20passing-brightgreen)](#testing)
+TaskPilot is a proof of concept exploring how AI agents can move beyond generating answers to executing multi-step tasks through tools, observing results, verifying outcomes, and requesting human approval when needed.
+
+The project combines an agent execution backend with two interfaces: a browser-based web application and a PyQt5 desktop application.
+
+Rather than claiming to automate every business workflow, TaskPilot demonstrates agentic execution through supported product-recommendation and invoice-processing workflows.
 
 ## Overview
 
-NutriCoach Agentic Worker is an agent-oriented system that turns natural-language nutrition-product requests into structured, verifiable tasks.
+Company work is spread across applications, documents, websites, and internal systems. Completing a request often requires understanding the intended outcome, identifying the required steps, using tools, evaluating results, handling failures, and confirming that the work was completed correctly.
 
-Rather than relying on a single model response, the system uses a worker architecture to interpret requirements, plan actions, execute tools, observe their results, recover from failures, verify outcomes, and request human approval when required.
+TaskPilot explores the engineering behind that execution loop:
 
-For example, a user can request:
+**Goal → Understand → Plan → Execute → Observe → Verify → Complete**
 
-> Find a protein bar under ₹150 with at least 20 g of protein and less than 5 g of added sugar.
+Human approval is supported at configured decision points.
 
-The worker searches available products, evaluates them against the constraints, records its execution state, and presents a recommendation for approval before completing the task.
+## Applications
 
-The project focuses on **reliable agent execution and observable task state**, not simply generating conversational answers.
+### Web application
 
-## Key Features
+A browser-based interface for interacting with the agent through a local development server.
 
-- **Natural-language requirements:** Extracts product preferences and constraints from a user goal.
-- **Planning and execution:** Converts a goal into actionable steps and executes them through registered tools.
-- **Tool-based analysis:** Supports product search, ingredient analysis, and OCR-related workflows.
-- **Constraint-aware comparison:** Compares product attributes against requirements.
-- **Observation and state tracking:** Records tool actions, observations, current step, errors, and retry counts.
-- **Failure recovery:** Supports retrying execution, continuing, relaxing constraints where appropriate, or stopping.
-- **Verification:** Checks whether the recommendation satisfies the task requirements.
-- **Human-in-the-loop approval:** Supports explicit approval or rejection before final completion.
-- **Persistent task management:** Stores task state using Django's ORM.
-- **REST API:** Exposes endpoints to create tasks, inspect their status, and approve or reject recommendations.
-- **Execution observability:** Exposes timestamps, errors, recovery information, and execution duration through task responses.
-- **Automated testing:** Includes tests for agent components, API behavior, lifecycle transitions, failures, and observability.
+The web interface is intended to provide a convenient way to submit tasks, inspect execution results, and interact with supported workflows.
+
+### Desktop application
+
+A PyQt5 desktop interface for running and reviewing agent tasks locally.
+
+The desktop version provides an alternative to the browser interface while using the project's Python-based application components.
+
+### Agent backend
+
+The backend contains the task worker, planner, requirement extractor, executor, and tools used by supported workflows.
+
+The extent to which the two interfaces share task state and execution history depends on their actual backend integration and persistence configuration.
+
+## Core Capabilities
+
+- **Requirement extraction:** Convert natural-language requests into structured constraints.
+- **Task planning:** Create execution plans for supported task types.
+- **Tool orchestration:** Dispatch operations through modular tool interfaces.
+- **Product search and comparison:** Evaluate available products against user-defined requirements.
+- **Execution observations:** Collect and process tool outputs.
+- **Verification:** Check results before reporting completion in supported workflows.
+- **Human-in-the-loop approval:** Pause configured workflows for a human decision.
+- **Invoice processing:** Extract invoice fields and line items and flag inconsistencies for review.
+- **Multiple interfaces:** Access the project through a local web application or a PyQt5 desktop application.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    U[User Goal] --> API[FastAPI Task API]
-    API --> DB[(Django ORM / Database)]
-    API --> W[Agent Worker]
-    W --> R[Requirement Extraction]
-    R --> P[Planner]
-    P --> E[Executor]
-    E --> T[Registered Tools]
-    T --> O[Observer]
-    O --> S[Update Agent State]
-    S --> V[Verifier]
-    V --> D{Requirements satisfied?}
-    D -- No --> REC[Recovery Strategy]
-    REC --> P
-    D -- Yes --> A{Approval required?}
-    A -- Yes --> H[Human Approval]
-    H -- Approved --> C[Complete Task]
-    H -- Rejected --> X[Mark Rejected]
-    A -- No --> C
-    S --> DB
-    C --> DB
-    X --> DB
-    DB --> API
+    U[User request] --> I{Choose interface}
+    I --> W[Web application]
+    I --> D[Desktop application]
+    W --> B[Agent backend]
+    D --> B
+    B --> R[Requirement extraction]
+    R --> P[Task planning]
+    P --> E[Tool execution]
+    E --> O[Observe results]
+    O --> V[Verify outcome]
+    V --> H{Approval required?}
+    H -- Yes --> A[Human review]
+    H -- No --> C[Complete task]
+    A --> C
+    C --> F[Present final result]
 ```
 
-### Core components
+This is a conceptual overview of the architecture. The actual workflow and approval behavior depend on the selected task and implemented execution path.
 
-| Component | Responsibility |
-|---|---|
-| `planner.py` | Creates a sequence of steps for the requested goal. |
-| `requirement_extractor.py` | Extracts structured requirements from natural-language input. |
-| `executor.py` | Coordinates the execution of planned steps through tools. |
-| `observer.py` | Captures execution observations and results. |
-| `recovery.py` | Determines how to respond to recoverable execution failures. |
-| `verifier.py` | Validates whether the task outcome meets its requirements. |
-| `comparator.py` | Compares candidate products against task constraints. |
-| `approval.py` | Handles human approval and rejection decisions. |
-| `state.py` | Represents the agent's current task and execution state. |
-| `worker.py` | Orchestrates the agent workflow. |
-| `task_service.py` | Coordinates task execution and persistence. |
-| `tools/` | Contains the registered tools used by the worker. |
-| `api/routes.py` | Implements task creation, retrieval, approval, and rejection endpoints. |
-| `agent_tasks/models.py` | Defines the persistent task model. |
+## Example Workflows
 
-## Task Lifecycle
+### Product recommendation
 
-A task progresses through the following stages:
+A user requests a product using constraints such as category, budget, minimum protein, and maximum added sugar.
 
-1. **Submission:** Receive a natural-language goal through the API.
-2. **Initialization:** Create a persistent task record.
-3. **Requirement extraction:** Convert the goal into structured constraints.
-4. **Planning:** Determine the steps needed to satisfy the goal.
-5. **Execution:** Run the relevant tools and collect their outputs.
-6. **Observation:** Record actions, outputs, and errors.
-7. **Recovery:** Retry or adjust the execution strategy when appropriate.
-8. **Verification:** Evaluate the result against the task constraints.
-9. **Approval:** Wait for an explicit human decision when approval is required.
-10. **Completion:** Persist the final outcome and expose it through the API.
+The agent extracts requirements, searches the available product data, compares candidates, evaluates the recommendation, and requests human approval when required.
 
-A task awaiting approval is not treated as a completed task. This distinction allows the system to preserve the pending decision and resume the appropriate workflow after approval or rejection.
+### Invoice processing
 
-## Example
+The agent processes an invoice, extracts structured fields and line items, and identifies inconsistencies that require review.
 
-Consider the request:
+Uncertain extracted values should remain distinguishable from verified information; discrepancies should not be silently corrected.
 
-`Find a protein bar under ₹150 with at least 20g protein and less than 5g added sugar.`
+## Technology Stack
 
-The mock product dataset contains two candidates:
+- **Language:** Python
+- **Backend API:** FastAPI
+- **Desktop interface:** PyQt5
+- **Web interface:** React.js, with the frontend development tooling configured in the repository
+- **Agent architecture:** Planner, worker, requirement extractor, executor, and tool registry
+- **LLM integration:** Gemini
+- **Document processing:** OCR and invoice extraction
+- **Testing:** pytest
 
-| Product | Price | Protein | Added sugar |
-|---|---:|---:|---:|
-| Choco Protein Bar | ₹120 | 20 g | 12 g |
-| Peanut Protein Bar | ₹135 | 21 g | 3 g |
-
-The Choco Protein Bar fails the added-sugar constraint. The Peanut Protein Bar satisfies all three numerical constraints and can be selected as the candidate recommendation.
-
-The worker can then verify the candidate and wait for human approval before final completion.
-
-*The example uses mock product data and illustrates constraint evaluation; it does not establish a real-world nutrition or health claim.*
-
-## API Reference
-
-The API uses the `/api/v1` prefix.
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/tasks` | Create and schedule a task. |
-| `GET` | `/api/v1/tasks/{task_id}` | Retrieve task state and execution details. |
-| `POST` | `/api/v1/tasks/{task_id}/approve` | Approve a pending task. |
-| `POST` | `/api/v1/tasks/{task_id}/reject` | Reject a pending task. |
-
-### Create a task
-
-Request:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/tasks" \
-  -H "Content-Type: application/json" \
-  -d "{\"goal\":\"Find a protein bar under 150 rupees with at least 20g protein and less than 5g added sugar\"}"
-```
-
-The response includes a task identifier and initial task state. Use the returned `task_id` to inspect execution progress.
-
-### Retrieve task status
-
-```bash
-curl "http://127.0.0.1:8000/api/v1/tasks/YOUR_TASK_ID"
-```
-
-The task response exposes fields such as:
-
-- `status`
-- `constraints`
-- `plan`
-- `current_step`
-- `observations`
-- `actions`
-- `errors`
-- `retry_count`
-- `recovery_action`
-- `approval_required`
-- `approval_status`
-- `verification_result`
-- `final_result`
-- `started_at`
-- `completed_at`
-- `execution_duration_seconds`
-
-### Approve or reject
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/tasks/YOUR_TASK_ID/approve"
-```
-
-Or:
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/tasks/YOUR_TASK_ID/reject"
-```
-
-Approval and rejection are valid only when the task requires approval and is awaiting a decision. Invalid transitions return an API error.
-
-## Project Structure
+## Repository Structure
 
 ```text
-NutriCoach-Agentic-Worker/
+TaskPilot/
 ├── backend/
 │   ├── agent/
-│   │   ├── agent.py
-│   │   ├── approval.py
-│   │   ├── comparator.py
-│   │   ├── executor.py
-│   │   ├── observer.py
-│   │   ├── planner.py
-│   │   ├── recovery.py
-│   │   ├── requirement_extractor.py
-│   │   ├── requirements.py
-│   │   ├── state.py
-│   │   ├── task_service.py
-│   │   ├── verifier.py
-│   │   └── worker.py
-│   ├── agent_tasks/
-│   │   ├── models.py
-│   │   ├── admin.py
-│   │   ├── apps.py
-│   │   └── migrations/
 │   ├── api/
-│   │   ├── main.py
-│   │   ├── routes.py
-│   │   └── schemas.py
-│   ├── model/
-│   │   └── rag_service.py
 │   └── tools/
-│       ├── ingredient_tool.py
-│       ├── ocr_tool.py
-│       ├── product_tool.py
-│       └── registry.py
-├── mock_environment/
-│   └── products.json
 ├── tests/
-│   └── api/
-│       └── test_tasks.py
-├── pytest.ini
-├── requirements.txt
-└── README.md
+├── frontend.py
+├── README.md
+└── [web frontend directory]
 ```
 
-The tree highlights the main modules; additional settings, migrations, and test files may be present.
+The web frontend directory is shown as a placeholder. Replace it with the actual directory name from the repository and expand the tree to match the current codebase.
 
-## Installation and Setup
+## Getting Started
 
 ### Prerequisites
 
-- Python installed locally
+- Python environment compatible with the project's dependencies
+- Conda or another supported Python environment manager
+- Node.js and npm for the web frontend
 - Git
-- A virtual environment
-- The dependencies specified by the project
+- Required API credentials for external model services
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Anwesha-TU/NutriCoach-Agentic-Worker.git
-cd NutriCoach-Agentic-Worker
+git clone https://github.com/YOUR_USERNAME/taskpilot.git
+cd taskpilot
 ```
 
-### 2. Create and activate a virtual environment
+Replace `YOUR_USERNAME` with your GitHub username.
 
-On Windows:
+### 2. Set up the Python environment
+
+Activate the existing environment:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+conda activate deepsort
 ```
 
-On macOS or Linux:
+Install the project's Python dependencies using the dependency file maintained in the repository. If a root-level `requirements.txt` exists:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-### 3. Install dependencies
+Configure required API credentials through the environment variables expected by the application. Never commit secrets.
 
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Ensure the dependency file includes the packages needed by the current agent, API, Django, and test implementations.
-
-### 4. Configure environment variables
-
-Create a local `.env` file or configure the environment variables required by your local settings and integrations.
-
-Do not commit API keys, passwords, or other secrets. If an integration requires a model API key, provide it through the configured environment variable.
-
-### 5. Apply database migrations
+### 3. Start the backend
 
 From the repository root:
 
-```bash
-python backend/manage.py migrate
+```powershell
+uvicorn api.main:app --reload --app-dir backend
 ```
 
-### 6. Start the API
+The local FastAPI documentation is typically available at:
 
-From the repository root:
+http://127.0.0.1:8000/docs
 
-```bash
-uvicorn api.main:app --app-dir backend --reload
+### 4. Start the web application
+
+Open another terminal and navigate to the directory containing the web frontend's `package.json`.
+
+For a Vite-based React application, the commands are typically:
+
+```powershell
+npm install
+npm run dev
 ```
 
-The development server should be available at `http://127.0.0.1:8000`.
+Open the local URL printed by the development server. A Vite application commonly uses port 5173, but use the actual URL shown in your terminal.
 
-If the application uses a different local settings configuration, follow the environment setup expected by `backend/api/main.py`.
+### 5. Start the desktop application
+
+Open a separate terminal from the repository root:
+
+```powershell
+conda activate deepsort
+python frontend.py
+```
+
+The web application and desktop application are separate interfaces. Start the services required by the particular interface you want to test.
 
 ## Testing
 
-Run the test suite from the repository root:
+Run the automated Python test suite from the repository root:
 
-```bash
-pytest
+```powershell
+python -m pytest tests -q
 ```
 
-The latest reported test run completed with **97 passed and 4 warnings in 34.32 seconds**.
+The most recently reported result was **97 passed, 0 failed**. Rerun the suite after code or dependency changes to confirm the current status.
 
-The tests cover core execution behavior and API workflows, including task creation and retrieval, approval and rejection rules, lifecycle timestamps, failure handling, and observability response fields.
+Automated backend tests do not replace end-to-end checks of the web interface, desktop interface, and their integration with the backend.
 
-Test counts can change as the project evolves. Run the suite locally to confirm the current result.
+## Engineering Principles
 
-## Engineering Design Principles
+- **Outcome-oriented execution:** Focus on completing tasks rather than only generating responses.
+- **Modular architecture:** Separate planning, execution, tools, and interfaces.
+- **Observable behavior:** Use execution outputs and task state to assess what happened.
+- **Verification:** Evaluate results before reporting completion.
+- **Human oversight:** Preserve approval checkpoints where configured.
+- **Incremental extensibility:** Make it possible to introduce additional tools and workflows without rewriting the entire worker.
 
-- **Explicit state:** Represent task progress and outcomes as structured state.
-- **Tool-based execution:** Keep external capabilities separate from orchestration logic.
-- **Verifiable outcomes:** Evaluate candidate results against explicit requirements.
-- **Controlled recovery:** Handle failures through defined recovery strategies rather than unbounded retries.
-- **Human oversight:** Require explicit approval when the workflow calls for it.
-- **Observability:** Persist enough execution information to investigate task behavior.
-- **Separation of concerns:** Keep planning, execution, verification, persistence, and API handling in distinct modules.
+## Current Scope and Limitations
 
-## Current Scope and Future Improvements
+TaskPilot is an experimental task-execution prototype, not a production-ready autonomous company operator.
 
-Potential next steps include:
+Its demonstrated workflows are limited to the task types, tools, and data sources implemented in the repository. General-purpose browser automation, arbitrary desktop control, persistent organization-wide memory, distributed task queues, and reliable execution across arbitrary enterprise systems should not be assumed to be implemented.
 
-- Add GitHub Actions CI for automated tests.
-- Add structured logging and request correlation IDs.
-- Improve recovery and verification metrics.
-- Add stronger configuration validation and environment documentation.
-- Add integration tests for concurrent task execution.
-- Containerize the API and database configuration.
-- Build a dashboard for inspecting task plans, actions, failures, and approval status.
+Recovery, verification, approval, and persistence behavior must be evaluated for each workflow. The web and desktop interfaces should also be tested independently.
 
-## Disclaimer
+## Future Engineering Directions
 
-NutriCoach is an informational software project. Product data and ingredient analysis depend on the underlying data sources and model outputs. Recommendations should not be treated as medical advice or as a substitute for professional dietary guidance.
+- Improve failure classification, recovery, and replanning.
+- Add reusable connectors for APIs, files, browsers, and desktop applications.
+- Introduce persistent, organization-scoped memory with access controls.
+- Strengthen permissions, approval policies, and audit trails.
+- Add structured execution traces and evidence-backed completion.
+- Evaluate reliability through repeatable end-to-end tests.
+- Explore background execution, retries, scheduling, and task queues.
+- Improve packaging and deployment for reproducible use.
 
-## Author
+## License
 
-Developed by **Anwesha Chakraborty**.
+Add an appropriate license before distributing the project as open source.
 
-Repository: [NutriCoach-Agentic-Worker](https://github.com/Anwesha-TU/NutriCoach-Agentic-Worker)
+---
+
+**TaskPilot — Plan. Execute. Verify.**
