@@ -44,7 +44,10 @@ WORKFLOW_PLANS = {
 
 def _contains_phrase(text: str, phrases: List[str]) -> bool:
     return any(
-        re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text)
+        re.search(
+            r"(?<!\w)" + re.escape(phrase) + r"(?!\w)",
+            text,
+        )
         for phrase in phrases
     )
 
@@ -61,30 +64,68 @@ def _classify_goal(goal: str) -> str:
             "supplier bill",
             "process invoice",
             "extract invoice",
+            "bill processing",
         ],
     ):
         return "invoice_processing"
 
-    if _contains_phrase(
+    product_intent = _contains_phrase(
         text,
         [
+            "product",
+            "products",
+            "product catalog",
+            "product catalogue",
+            "item",
+            "items",
+            "inventory",
+            "stock",
+            "shopping",
+            "purchase",
+            "buy ",
+            "price comparison",
+            "compare prices",
+            "compare their prices",
+            "compare the price",
+            "compare price",
+            "cheapest",
+            "lowest price",
+            "most affordable",
+            "available chocolate",
+            "available protein",
+            "available bars",
+            "chocolate bar",
+            "chocolate bars",
             "protein bar",
             "protein bars",
-            "search products",
+            "find alternatives",
+            "search alternatives",
+            "search for",
+            "find available",
+            "show available",
+            "compare alternatives",
+            "compare products",
             "find a product",
             "find products",
-            "product recommendation",
+            "search products",
             "search for products",
-            "find alternatives",
+            "product recommendation",
+            "recommend a product",
+            "recommend products",
+            "which product",
+            "which one should i buy",
         ],
-    ):
+    )
+
+    if product_intent:
         return "product_recommendation"
 
     return "general_task"
 
 
 def _deterministic_plan(goal: str) -> List[str]:
-    return list(WORKFLOW_PLANS[_classify_goal(goal)])
+    task_type = _classify_goal(goal)
+    return list(WORKFLOW_PLANS[task_type])
 
 
 def create_plan(
@@ -130,4 +171,3 @@ def initialize_plan(
     state.current_step = 0
     state.status = "planned"
     return state
-

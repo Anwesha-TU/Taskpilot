@@ -1,35 +1,72 @@
+
 [
-    {
-        "product_id": "P001",
-        "name": "Choco Protein Bar",
-        "brand": "FitFuel",
-        "category": "protein_bar",
-        "ingredients": "Milk protein, cocoa, added sugar, palm oil, emulsifier E471",
-        "protein_g": 20,
-        "added_sugar_g": 12,
-        "price": 120,
-        "available": true
-    },
-    {
-        "product_id": "P002",
-        "name": "Peanut Protein Bar",
-        "brand": "NutriFit",
-        "category": "protein_bar",
-        "ingredients": "Peanuts, milk protein, cocoa, dates",
-        "protein_g": 21,
-        "added_sugar_g": 3,
-        "price": 135,
-        "available": true
-    },
-    {
-        "product_id": "P003",
-        "name": "Classic Protein Bar",
-        "brand": "PowerFood",
-        "category": "protein_bar",
-        "ingredients": "Whey protein, glucose syrup, palm oil, artificial flavor",
-        "protein_g": 19,
-        "added_sugar_g": 10,
-        "price": 110,
-        "available": false
-    }
+  {
+    "product_id": "P001",
+    "name": "Choco Protein Bar",
+    "brand": "FitFuel",
+    "category": "protein_bar",
+    "ingredients": "Milk protein, cocoa, added sugar, palm oil, emulsifier E471",
+    "protein_g": 20,
+    "added_sugar_g": 12,
+    "price": 120,
+    "available": true
+  },
+  {
+    "product_id": "P002",
+    "name": "Peanut Protein Bar",
+    "brand": "NutriFit",
+    "category": "protein_bar",
+    "ingredients": "Peanuts, milk protein, cocoa, dates",
+    "protein_g": 21,
+    "added_sugar_g": 3,
+    "price": 135,
+    "available": true
+  },
+  {
+    "product_id": "P003",
+    "name": "Classic Protein Bar",
+    "brand": "PowerFood",
+    "category": "protein_bar",
+    "ingredients": "Whey protein, glucose syrup, palm oil, artificial flavor",
+    "protein_g": 19,
+    "added_sugar_g": 10,
+    "price": 110,
+    "available": false
+  },
+  {
+    "product_id": "L001",
+    "name": "Student Laptop 16GB",
+    "brand": "DemoTech",
+    "category": "laptop",
+    "price": 42999,
+    "available": true,
+    "ram_gb": 16,
+    "storage_gb": 512,
+    "processor": "Demo i5",
+    "display_inches": 15.6
+  },
+  {
+    "product_id": "L002",
+    "name": "Performance Laptop 16GB",
+    "brand": "SampleComputers",
+    "category": "laptop",
+    "price": 47999,
+    "available": true,
+    "ram_gb": 16,
+    "storage_gb": 1024,
+    "processor": "Demo Ryzen 5",
+    "display_inches": 15.6
+  },
+  {
+    "product_id": "L003",
+    "name": "Budget Laptop 8GB",
+    "brand": "DemoTech",
+    "category": "laptop",
+    "price": 35999,
+    "available": true,
+    "ram_gb": 8,
+    "storage_gb": 512,
+    "processor": "Demo i3",
+    "display_inches": 14
+  }
 ]

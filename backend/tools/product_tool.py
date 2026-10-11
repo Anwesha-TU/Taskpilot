@@ -1,3 +1,5 @@
+
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -12,92 +14,124 @@ PRODUCT_FILE = (
 
 
 def load_products() -> List[Dict[str, Any]]:
-    """
-    Load products from the mock product environment.
-    """
+    if not PRODUCT_FILE.exists():
+        raise FileNotFoundError(
+            f"Product catalog not found: {PRODUCT_FILE}"
+        )
 
-    import json
+    with PRODUCT_FILE.open("r", encoding="utf-8") as file:
+        products = json.load(file)
 
-    with open(PRODUCT_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
+    if not isinstance(products, list):
+        raise ValueError("Product catalog must contain a JSON list.")
+
+    return products
+
+
+def _normalise(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", " ").replace("_", " ")
+
+
+def _matches_query(product: Dict[str, Any], query: str) -> bool:
+    if not query:
+        return True
+
+    searchable = " ".join(
+        _normalise(value)
+        for value in product.values()
+        if not isinstance(value, (dict, list))
+    )
+
+    terms = _normalise(query).split()
+    return all(term in searchable for term in terms)
 
 
 @registry.register(
     "search_products",
-    "Search the product environment for suitable food alternatives."
+    "Search the local product catalog by category, query, "
+    "price, availability, and product attributes."
 )
 def search_products(
     category: Optional[str] = None,
+    query: Optional[str] = None,
     max_price: Optional[float] = None,
+    min_price: Optional[float] = None,
     min_protein: Optional[float] = None,
     max_added_sugar: Optional[float] = None,
+    available: Optional[bool] = None,
+    min_ram_gb: Optional[float] = None,
+    min_storage_gb: Optional[float] = None,
+    brand: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Search products using nutritional and price constraints.
-
-    Supported constraints:
-
-        category
-        max_price
-        min_protein
-        max_added_sugar
-    """
-
     products = load_products()
-
-    filtered_products = []
+    results = []
 
     for product in products:
+        product_category = _normalise(product.get("category"))
+        requested_category = _normalise(category) if category else ""
 
-        # Category
+        if requested_category and product_category != requested_category:
+            continue
 
-        if category is not None:
+        if not _matches_query(product, query or ""):
+            continue
 
-            if product.get("category") != category:
+        if brand and _normalise(brand) not in _normalise(product.get("brand")):
+            continue
+
+        if available is not None:
+            if product.get("available") is not available:
                 continue
 
-        # Maximum price
+        numeric_filters = [
+            ("price", min_price, "min"),
+            ("price", max_price, "max"),
+            ("protein_g", min_protein, "min"),
+            ("added_sugar_g", max_added_sugar, "max"),
+            ("ram_gb", min_ram_gb, "min"),
+            ("storage_gb", min_storage_gb, "min"),
+        ]
 
-        if max_price is not None:
+        rejected = False
 
-            price = product.get("price")
-
-            if price is None:
+        for field, limit, direction in numeric_filters:
+            if limit is None:
                 continue
 
-            if float(price) > float(max_price):
-                continue
+            value = product.get(field)
 
-        # Minimum protein
+            # Missing specifications must not satisfy a hard constraint.
+            if value is None:
+                rejected = True
+                break
 
-        if min_protein is not None:
+            try:
+                value = float(value)
+                limit = float(limit)
+            except (TypeError, ValueError):
+                rejected = True
+                break
 
-            protein = product.get("protein_g")
+            if direction == "min" and value < limit:
+                rejected = True
+                break
 
-            if protein is None:
-                continue
+            if direction == "max" and value > limit:
+                rejected = True
+                break
 
-            if float(protein) < float(min_protein):
-                continue
+        if rejected:
+            continue
 
-        # Maximum added sugar
-
-        if max_added_sugar is not None:
-
-            added_sugar = product.get("added_sugar_g")
-
-            if added_sugar is None:
-                continue
-
-            if float(added_sugar) > float(max_added_sugar):
-                continue
-
-        # Product passed all constraints
-
-        filtered_products.append(product)
+        results.append(product)
 
     return {
         "success": True,
-        "count": len(filtered_products),
-        "products": filtered_products,
+        "count": len(results),
+        "products": results,
+        "message": (
+            f"Found {len(results)} matching product(s)."
+            if results
+            else "No matching products exist in the local catalog."
+        ),
     }

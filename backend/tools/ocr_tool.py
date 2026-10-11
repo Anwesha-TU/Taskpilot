@@ -1,29 +1,35 @@
-from tools.registry import registry
-from model.ocr import extract_text_from_image
 
+import pytesseract
+from PIL import Image, ImageOps, ImageEnhance
 
-@registry.register(
-    "ocr_product_label",
-    "Extract text from a food product label image."
+pytesseract.pytesseract.tesseract_cmd = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 )
-def ocr_product_label(image_path: str):
 
+
+def extract_text_from_image(image_path):
+    """Extract text from an invoice using enhanced image preprocessing."""
     try:
-        text = extract_text_from_image(image_path)
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
 
-        if not text or not text.strip():
-            return {
-                "success": False,
-                "error": "No readable text was detected."
-            }
+        # Add a white border to improve text detection.
+        image = ImageOps.expand(image, border=30, fill="white")
 
-        return {
-            "success": True,
-            "text": text.strip()
-        }
+        # Enlarge the image for improved character recognition.
+        image = image.resize(
+            (image.width * 3, image.height * 3),
+            Image.Resampling.LANCZOS,
+        )
 
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        # Improve contrast.
+        image = ImageEnhance.Contrast(image).enhance(1.5)
+
+        # Preserve line and table structure.
+        config = "--oem 3 --psm 6"
+
+        text = pytesseract.image_to_string(image, config=config)
+        return text.strip()
+
+    except Exception as exc:
+        raise RuntimeError(f"Invoice OCR failed: {exc}") from exc

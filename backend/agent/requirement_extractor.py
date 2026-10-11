@@ -1,174 +1,130 @@
+
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class RequirementExtractor:
-    """
-    Extract structured requirements from a natural-language user goal.
-
-    Example:
-
-        "Find a protein bar under ₹150 with at least 20g
-        protein and less than 5g added sugar"
-
-    becomes:
-
-        {
-            "category": "protein_bar",
-            "max_price": 150,
-            "min_protein": 20,
-            "max_added_sugar": 5
-        }
-
-    This deterministic implementation is intentionally simple.
-    It can later be replaced or augmented with an LLM-based
-    requirement extraction layer.
-    """
+    """Extract structured constraints from natural-language task goals."""
 
     CATEGORY_KEYWORDS = {
-        "protein_bar": [
-            "protein bar",
-            "protein bars",
-        ],
-        "snack": [
-            "snack",
-            "snacks",
-        ],
-        "beverage": [
-            "beverage",
-            "drink",
-            "drinks",
-        ],
-        "meal": [
-            "meal",
-            "meals",
-        ],
+        "laptop": ["laptop", "laptops", "notebook computer", "notebook computers"],
+        "protein_bar": ["protein bar", "protein bars"],
+        "snack": ["snack", "snacks"],
+        "beverage": ["beverage", "beverages", "drink", "drinks"],
+        "meal": ["meal", "meals"],
     }
 
     def extract(self, goal: str) -> Dict[str, Any]:
-        """
-        Extract structured constraints from the user's goal.
-        """
-
         if not isinstance(goal, str):
             return {}
 
         text = goal.lower().strip()
-
         constraints: Dict[str, Any] = {}
 
-        
-        # CATEGORY
-        
-
         category = self._extract_category(text)
-
         if category:
             constraints["category"] = category
 
-        
-        # PRICE
-        
-
         max_price = self._extract_max_price(text)
-
         if max_price is not None:
             constraints["max_price"] = max_price
 
-        
-        # MINIMUM PROTEIN
-        
+        min_price = self._extract_min_price(text)
+        if min_price is not None:
+            constraints["min_price"] = min_price
 
         min_protein = self._extract_min_protein(text)
-
         if min_protein is not None:
             constraints["min_protein"] = min_protein
 
-        
-        # MAXIMUM ADDED SUGAR
-        
-
         max_added_sugar = self._extract_max_added_sugar(text)
-
         if max_added_sugar is not None:
             constraints["max_added_sugar"] = max_added_sugar
 
-        
-        # AVAILABILITY
-        
+        min_ram = self._extract_min_ram(text)
+        if min_ram is not None:
+            constraints["min_ram_gb"] = min_ram
+
+        min_storage = self._extract_min_storage(text)
+        if min_storage is not None:
+            constraints["min_storage_gb"] = min_storage
 
         if any(
             phrase in text
-            for phrase in [
+            for phrase in (
                 "available",
                 "in stock",
                 "currently available",
-            ]
+            )
         ):
             constraints["available"] = True
 
         return constraints
 
-    
-    # CATEGORY
-    
-
-    def _extract_category(self, text: str):
+    def _extract_category(self, text: str) -> Optional[str]:
         for category, keywords in self.CATEGORY_KEYWORDS.items():
-
-            for keyword in keywords:
-
-                if keyword in text:
-                    return category
-
+            if any(keyword in text for keyword in keywords):
+                return category
         return None
 
-    
-    # PRICE
-    
+    @staticmethod
+    def _number_pattern() -> str:
+        """Match integers with optional thousands separators or decimals."""
+        return r"\d+(?:,\d{3})*(?:\.\d+)?"
 
-    def _extract_max_price(self, text: str):
-        """
-        Detect expressions such as:
+    @classmethod
+    def _parse_number(cls, value: str) -> float:
+        return float(value.replace(",", ""))
 
-            under ₹150
-            below ₹150
-            less than ₹150
-            max ₹150
-            maximum ₹150
-            within ₹150
-            under 150 rupees
-        """
+    def _extract_max_price(self, text: str) -> Optional[float]:
+        number = self._number_pattern()
 
         patterns = [
-            r"(?:under|below|less than|maximum|max|within)\s*₹?\s*(\d+(?:\.\d+)?)",
-            r"₹?\s*(\d+(?:\.\d+)?)\s*(?:or less|maximum|max)",
-            r"(?:under|below|less than|maximum|max|within)\s*(\d+(?:\.\d+)?)\s*(?:rupees|rs)",
+            rf"\b(?:under|below|less than|maximum|max|within|up to|upto)\s*₹?\s*({number})",
+            rf"₹\s*({number})\s*(?:or less|maximum|max)",
+            rf"\b({number})\s*(?:rupees|rs\.?)\s*(?:or less|maximum|max)?",
         ]
 
         for pattern in patterns:
-
             match = re.search(pattern, text)
+            if not match:
+                continue
 
-            if match:
-                return float(match.group(1))
+            value = self._parse_number(match.group(1))
+
+            if any(
+                phrase in text
+                for phrase in (
+                    "under",
+                    "below",
+                    "less than",
+                    "maximum",
+                    "max",
+                    "within",
+                    "up to",
+                    "upto",
+                    "or less",
+                )
+            ) or "₹" in text or "rupee" in text or " rs" in text:
+                return value
 
         return None
 
-    
-    # MINIMUM PROTEIN
-    
+    def _extract_min_price(self, text: str) -> Optional[float]:
+        number = self._number_pattern()
+        patterns = [
+            rf"\b(?:above|over|more than|at least|minimum|min)\s*₹?\s*({number})",
+            rf"₹\s*({number})\s*(?:or more|and above)",
+        ]
 
-    def _extract_min_protein(self, text: str):
-        """
-        Detect expressions such as:
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return self._parse_number(match.group(1))
 
-            at least 20g protein
-            minimum 20g protein
-            20g or more protein
-            protein at least 20g
-        """
+        return None
 
+    def _extract_min_protein(self, text: str) -> Optional[float]:
         patterns = [
             r"(?:at least|minimum|min)\s*(\d+(?:\.\d+)?)\s*g?\s*protein",
             r"(\d+(?:\.\d+)?)\s*g?\s*(?:or more)\s*protein",
@@ -176,37 +132,48 @@ class RequirementExtractor:
         ]
 
         for pattern in patterns:
-
             match = re.search(pattern, text)
-
             if match:
                 return float(match.group(1))
 
         return None
 
-    
-    # MAXIMUM ADDED SUGAR
-    
-
-    def _extract_max_added_sugar(self, text: str):
-        """
-        Detect expressions such as:
-
-            less than 5g added sugar
-            below 5g added sugar
-            maximum 5g added sugar
-            no more than 5g added sugar
-        """
-
+    def _extract_max_added_sugar(self, text: str) -> Optional[float]:
         patterns = [
             r"(?:less than|below|under|maximum|max|no more than)\s*(\d+(?:\.\d+)?)\s*g?\s*added\s*sugar",
             r"added\s*sugar\s*(?:below|under|less than|maximum|max)\s*(\d+(?:\.\d+)?)\s*g?",
         ]
 
         for pattern in patterns:
-
             match = re.search(pattern, text)
+            if match:
+                return float(match.group(1))
 
+        return None
+
+    def _extract_min_ram(self, text: str) -> Optional[float]:
+        patterns = [
+            r"(?:at least|minimum|min)\s*(\d+(?:\.\d+)?)\s*gb\s*(?:of\s*)?ram\b",
+            r"(\d+(?:\.\d+)?)\s*gb\s*ram\b",
+            r"ram\s*(?:of|at least|minimum|min)\s*(\d+(?:\.\d+)?)\s*gb\b",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return float(match.group(1))
+
+        return None
+
+    def _extract_min_storage(self, text: str) -> Optional[float]:
+        patterns = [
+            r"(?:at least|minimum|min)\s*(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|storage)\b",
+            r"(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|storage)\b",
+            r"(?:ssd|storage)\s*(?:of|at least|minimum|min)\s*(\d+(?:\.\d+)?)\s*gb\b",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text)
             if match:
                 return float(match.group(1))
 

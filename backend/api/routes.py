@@ -1,7 +1,10 @@
+
 import uuid
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.db import transaction
+from django.utils import timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from agent.state import AgentState
@@ -9,6 +12,7 @@ from agent.task_service import AgentTaskService
 from agent.worker import AgentWorker
 from agent_tasks.models import AgentTask, InvoiceRecord
 from api.schemas import ApprovalResponse, TaskRequest, TaskResponse
+
 
 router = APIRouter(prefix="/api/v1")
 task_service = AgentTaskService()
@@ -51,9 +55,94 @@ def serialize_task(task: AgentTask) -> dict:
     }
 
 
-def execute_background_task(task_id: str):
+def load_state(task: AgentTask) -> AgentState:
+    return AgentState(
+        goal=task.goal,
+        constraints=dict(task.constraints or {}),
+        plan=list(task.plan or []),
+        current_step=task.current_step,
+        observations=list(task.observations or []),
+        actions=list(task.actions or []),
+        errors=list(task.errors or []),
+        retry_count=task.retry_count,
+        recovery_action=task.recovery_action or {},
+        approval_required=task.approval_required,
+        approval_status=task.approval_status or "pending",
+        verification_result=task.verification_result or {},
+        final_result=task.final_result or {},
+        status=task.status,
+    )
+
+
+def save_state(task: AgentTask, state: AgentState) -> None:
+    task.status = state.status
+    task.constraints = dict(state.constraints or {})
+    task.plan = list(state.plan or [])
+    task.current_step = state.current_step
+    task.observations = list(state.observations or [])
+    task.actions = list(state.actions or [])
+    task.errors = list(state.errors or [])
+    task.retry_count = state.retry_count
+    task.recovery_action = state.recovery_action or {}
+    task.approval_required = state.approval_required
+    task.approval_status = state.approval_status or "pending"
+    task.verification_result = state.verification_result or {}
+    task.final_result = state.final_result or {}
+
+    if state.status in {"completed", "failed", "rejected"}:
+        task.completed_at = task.completed_at or timezone.now()
+
+    task.save()
+
+
+def execute_background_task(task_id: str) -> None:
     try:
-        task_service.execute_task(task_id)
+        task = AgentTask.objects.get(task_id=task_id)
+        constraints = dict(task.constraints or {})
+        file_path = constraints.get("file_path")
+        is_invoice = bool(file_path) or "invoice" in task.goal.lower()
+
+        if not is_invoice:
+            task_service.execute_task(task_id)
+            return
+
+        if not file_path:
+            raise ValueError(
+                "Invoice image was not attached. Upload an image and "
+                "submit the task again."
+            )
+
+        image_path = Path(file_path).expanduser()
+        if not image_path.is_absolute():
+            image_path = Path.cwd() / image_path
+
+        if not image_path.is_file():
+            raise FileNotFoundError(
+                f"Invoice image was not found on the backend: {image_path}"
+            )
+
+        image_path = image_path.resolve()
+        task.status = "running"
+        task.started_at = timezone.now()
+        task.errors = []
+        task.save(
+            update_fields=[
+                "status",
+                "started_at",
+                "errors",
+                "updated_at",
+            ]
+        )
+
+        state = AgentWorker().run(
+            goal=task.goal,
+            file_path=str(image_path),
+        )
+
+        state.constraints = dict(state.constraints or {})
+        state.constraints["file_path"] = str(image_path)
+        save_state(task, state)
+
     except Exception as exc:
         try:
             task = AgentTask.objects.get(task_id=task_id)
@@ -64,10 +153,12 @@ def execute_background_task(task_id: str):
                     "message": str(exc),
                 }
             ]
+            task.completed_at = timezone.now()
             task.save(
                 update_fields=[
                     "status",
                     "errors",
+                    "completed_at",
                     "updated_at",
                 ]
             )
@@ -82,13 +173,15 @@ def create_task(
 ):
     task_id = generate_task_id()
 
+    constraints = {}
+    if request.file_path:
+        constraints["file_path"] = request.file_path
+
     task = AgentTask.objects.create(
         task_id=task_id,
         goal=request.goal,
         status="pending",
-        constraints={"file_path": request.file_path}
-        if request.file_path
-        else {},
+        constraints=constraints,
         plan=[],
         current_step=0,
         observations=[],
@@ -106,6 +199,13 @@ def create_task(
     return serialize_task(task)
 
 
+@router.get("/tasks")
+def list_tasks(limit: int = 100):
+    limit = max(1, min(limit, 500))
+    tasks = AgentTask.objects.order_by("-created_at")[:limit]
+    return [serialize_task(task) for task in tasks]
+
+
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task_id: str):
     try:
@@ -116,60 +216,19 @@ def get_task(task_id: str):
     return serialize_task(task)
 
 
-def load_state(task: AgentTask) -> AgentState:
-    return AgentState(
-        goal=task.goal,
-        constraints=task.constraints or {},
-        plan=task.plan or [],
-        current_step=task.current_step,
-        observations=task.observations or [],
-        actions=task.actions or [],
-        errors=task.errors or [],
-        retry_count=task.retry_count,
-        recovery_action=task.recovery_action or {},
-        approval_required=task.approval_required,
-        approval_status=task.approval_status,
-        verification_result=task.verification_result or {},
-        final_result=task.final_result or {},
-        status=task.status,
-    )
-
-
-def save_state(task: AgentTask, state: AgentState):
-    task.status = state.status
-    task.constraints = dict(state.constraints or {})
-    task.plan = list(state.plan or [])
-    task.current_step = state.current_step
-    task.observations = list(state.observations or [])
-    task.actions = list(state.actions or [])
-    task.errors = list(state.errors or [])
-    task.retry_count = state.retry_count
-    task.recovery_action = state.recovery_action or {}
-    task.approval_required = state.approval_required
-    task.approval_status = state.approval_status or "pending"
-    task.verification_result = state.verification_result or {}
-    task.final_result = state.final_result or {}
-
-    if state.status in {"completed", "failed", "rejected"}:
-        from django.utils import timezone
-
-        task.completed_at = task.completed_at or timezone.now()
-
-    task.save()
-
-
 def is_invoice_task(task: AgentTask, state: AgentState) -> bool:
     plan = state.plan or []
+    constraints = task.constraints or {}
 
     return (
-        isinstance((state.final_result or {}).get("invoice"), dict)
+        bool(constraints.get("file_path"))
+        or isinstance((state.final_result or {}).get("invoice"), dict)
         or any("invoice" in str(step).lower() for step in plan)
         or "invoice" in task.goal.lower()
     )
 
 
 def get_invoice_result(state: AgentState):
-    """Find extracted invoice data before or after task completion."""
     final_result = state.final_result or {}
     invoice_data = final_result.get("invoice")
 
@@ -186,12 +245,9 @@ def get_invoice_result(state: AgentState):
 
 
 def get_invoice_fields(invoice_data: dict) -> dict:
-    """Support nested extraction results and flat legacy results."""
-    nested_fields = invoice_data.get("fields")
-
-    if isinstance(nested_fields, dict):
-        return nested_fields
-
+    fields = invoice_data.get("fields")
+    if isinstance(fields, dict):
+        return fields
     return invoice_data
 
 
@@ -290,8 +346,7 @@ def approve_task(task_id: str):
                 detail="Invoice total is required before approval",
             )
 
-    worker = AgentWorker()
-    state = worker.approve(state)
+    state = AgentWorker().approve(state)
 
     if state.approval_status != "approved":
         save_state(task, state)
@@ -307,11 +362,16 @@ def approve_task(task_id: str):
             source_file = (task.constraints or {}).get("file_path", "")
 
             if not source_file:
-                for action in state.actions:
+                for action in state.actions or []:
                     action_input = action.get("input", {})
-                    if action.get("tool") == "ocr_invoice":
+                    if action.get("tool") in {
+                        "ocr_invoice",
+                        "ocr_product_label",
+                        "inspect_invoice",
+                    }:
                         source_file = action_input.get("file_path", "")
-                        break
+                        if source_file:
+                            break
 
             InvoiceRecord.objects.update_or_create(
                 task_id=task.task_id,
@@ -369,8 +429,7 @@ def reject_task(task_id: str):
             detail="Task approval is no longer pending",
         )
 
-    worker = AgentWorker()
-    state = worker.reject(state)
+    state = AgentWorker().reject(state)
     save_state(task, state)
 
     return {

@@ -21,7 +21,7 @@ genai.configure(api_key=API_KEY)
 BASE_DIR = os.path.dirname(__file__)
 EMBEDDINGS_PATH = os.path.join(BASE_DIR, "embeddings.json")
 
-GEMINI_MODEL = "models/gemini-2.5-flash"
+GEMINI_MODEL = "models/gemini-3.6-flash"
 
 # ----------------------------
 # LOAD MODELS + DATA

@@ -1,5 +1,10 @@
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -20,12 +25,17 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+
 import "./styles.css";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "rejected"]);
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "failed",
+  "rejected",
+]);
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -37,6 +47,7 @@ async function apiRequest(path, options = {}) {
   });
 
   const contentType = response.headers.get("content-type") || "";
+
   const payload = contentType.includes("application/json")
     ? await response.json()
     : await response.text();
@@ -104,13 +115,15 @@ function statusClass(status) {
   const normalized = String(status || "unknown").toLowerCase();
 
   if (["completed", "approved"].includes(normalized)) return "success";
-
   if (["failed", "rejected"].includes(normalized)) return "danger";
 
   if (
-    ["waiting_for_approval", "pending", "running", "in_progress"].includes(
-      normalized
-    )
+    [
+      "waiting_for_approval",
+      "pending",
+      "running",
+      "in_progress",
+    ].includes(normalized)
   ) {
     return "warning";
   }
@@ -164,7 +177,9 @@ function getGoalType(goal) {
   }
 
   if (
-    /\b(invoice|invoices|receipt|receipts|bill|billing document)\b/.test(text)
+    /\b(invoice|invoices|receipt|receipts|bill|billing document)\b/.test(
+      text
+    )
   ) {
     return "invoice";
   }
@@ -190,7 +205,10 @@ function findInvoiceData(task) {
   for (let i = observations.length - 1; i >= 0; i -= 1) {
     const observation = observations[i];
 
-    if (observation?.type === "invoice_fields" && observation.data) {
+    if (
+      observation?.type === "invoice_fields" &&
+      observation.data
+    ) {
       return observation.data.fields || observation.data;
     }
   }
@@ -198,10 +216,6 @@ function findInvoiceData(task) {
   return null;
 }
 
-/*
- * Product data is only read for product-related goals.
- * This prevents a product result from appearing on unrelated tasks.
- */
 function findProduct(task) {
   if (getGoalType(task?.goal) !== "product") return null;
 
@@ -219,7 +233,9 @@ function findProduct(task) {
     if (
       candidate &&
       typeof candidate === "object" &&
-      (candidate.name || candidate.product_name || candidate.product_id)
+      (candidate.name ||
+        candidate.product_name ||
+        candidate.product_id)
     ) {
       return candidate;
     }
@@ -307,7 +323,9 @@ function ResultSummary({ task }) {
   const invoice = goalType === "invoice" ? findInvoiceData(task) : null;
   const summary = goalType === "general" ? getGeneralSummary(result) : null;
 
-  const reasons = product ? getRecommendationReasons(task, product) : [];
+  const reasons = product
+    ? getRecommendationReasons(task, product)
+    : [];
 
   const verificationValid =
     verification?.valid === true ||
@@ -366,18 +384,24 @@ function ResultSummary({ task }) {
       {goalType === "product" && product && (
         <div className="human-result">
           <span className="result-kicker">RECOMMENDED OPTION</span>
+
           <h4>
-            {product.name || product.product_name || product.product_id}
+            {product.name ||
+              product.product_name ||
+              product.product_id}
           </h4>
 
-          {product.brand && <p className="muted">{product.brand}</p>}
+          {product.brand && (
+            <p className="muted">{product.brand}</p>
+          )}
 
           <div className="product-stats">
             <div>
               <span>Protein</span>
               <strong>
                 {product.protein_g ?? product.protein ?? "—"}
-                {product.protein_g != null || product.protein != null
+                {product.protein_g != null ||
+                product.protein != null
                   ? " g"
                   : ""}
               </strong>
@@ -386,7 +410,9 @@ function ResultSummary({ task }) {
             <div>
               <span>Added sugar</span>
               <strong>
-                {product.added_sugar_g ?? product.added_sugar ?? "—"}
+                {product.added_sugar_g ??
+                  product.added_sugar ??
+                  "—"}
                 {product.added_sugar_g != null ||
                 product.added_sugar != null
                   ? " g"
@@ -396,7 +422,9 @@ function ResultSummary({ task }) {
 
             <div>
               <span>Price</span>
-              <strong>{money(product.price, product.currency || "INR")}</strong>
+              <strong>
+                {money(product.price, product.currency || "INR")}
+              </strong>
             </div>
           </div>
 
@@ -418,18 +446,27 @@ function ResultSummary({ task }) {
       {goalType === "invoice" && invoice && (
         <div className="human-result">
           <h4>Extracted invoice details</h4>
+
           <div className="result-fields">
             <ResultField label="Vendor" value={invoice.vendor} />
+
             <ResultField
               label="Invoice number"
               value={invoice.invoice_number}
             />
+
             <ResultField
               label="Invoice date"
               value={invoice.date || invoice.invoice_date}
             />
+
             <ResultField label="Currency" value={invoice.currency} />
             <ResultField label="Total amount" value={invoice.total} />
+
+            <ResultField
+              label="Payment due date"
+              value={invoice.due_date || invoice.payment_due_date}
+            />
           </div>
         </div>
       )}
@@ -447,32 +484,36 @@ function ResultSummary({ task }) {
           <div className="human-result">
             <h4>Result unavailable in readable format</h4>
             <p className="result-text">
-              The task completed, but the backend did not provide a recognized
-              text summary. Open Technical details to inspect the actual result.
-              No unrelated recommendation has been substituted.
+              The task completed, but the backend did not provide a
+              recognized text summary. Open Technical details to
+              inspect the actual result.
             </p>
           </div>
         )}
 
-      {goalType === "product" && !product && task?.status === "completed" && (
-        <div className="human-result">
-          <h4>No structured product recommendation</h4>
-          <p className="result-text">
-            The task completed, but no matching product object was returned.
-            Inspect the raw final result to see what the agent actually produced.
-          </p>
-        </div>
-      )}
+      {goalType === "product" &&
+        !product &&
+        task?.status === "completed" && (
+          <div className="human-result">
+            <h4>No structured product recommendation</h4>
+            <p className="result-text">
+              The task completed, but no matching product object was
+              returned. Inspect the raw final result.
+            </p>
+          </div>
+        )}
 
-      {goalType === "invoice" && !invoice && task?.status === "completed" && (
-        <div className="human-result">
-          <h4>No extracted invoice fields</h4>
-          <p className="result-text">
-            The task completed, but no invoice fields were found in its result
-            or observations.
-          </p>
-        </div>
-      )}
+      {goalType === "invoice" &&
+        !invoice &&
+        task?.status === "completed" && (
+          <div className="human-result">
+            <h4>No extracted invoice fields</h4>
+            <p className="result-text">
+              The task completed, but no invoice fields were found in
+              its result or observations.
+            </p>
+          </div>
+        )}
 
       <div className="verification-summary">
         <span className="verification-icon">
@@ -496,11 +537,7 @@ function ResultSummary({ task }) {
 
           <p>
             {verification?.message ||
-              (verificationValid
-                ? "The backend marked the result as valid."
-                : verificationInvalid
-                  ? "The backend marked the result as invalid."
-                  : "The backend did not provide an explicit verification status.")}
+              "The backend did not provide an explicit verification status."}
           </p>
         </div>
       </div>
@@ -526,17 +563,28 @@ function InvoiceSummary({ task }) {
 
       <div className="result-fields">
         <ResultField label="Vendor" value={invoice.vendor} />
-        <ResultField label="Invoice number" value={invoice.invoice_number} />
+
+        <ResultField
+          label="Invoice number"
+          value={invoice.invoice_number}
+        />
+
         <ResultField
           label="Date"
           value={invoice.date || invoice.invoice_date}
         />
+
         <ResultField label="Currency" value={invoice.currency} />
         <ResultField label="Total" value={invoice.total} />
+
+        <ResultField
+          label="Due date"
+          value={invoice.due_date || invoice.payment_due_date}
+        />
       </div>
 
       <p className="muted">
-        Check these values against the original document before approval.
+        Check these values against the original document.
       </p>
     </section>
   );
@@ -556,6 +604,7 @@ function EvidencePanel({ title, icon: Icon, data, emptyText }) {
           <Icon size={16} />
           {title}
         </span>
+
         <span className="evidence-count">
           {hasData
             ? Array.isArray(data)
@@ -582,7 +631,12 @@ function Timeline({ plan, actions, task }) {
   const executedNames = new Set(
     actions
       .map((action) =>
-        String(action?.step || action?.step_name || action?.action || "")
+        String(
+          action?.step ||
+            action?.step_name ||
+            action?.action ||
+            ""
+        )
       )
       .filter(Boolean)
       .map((name) => name.toLowerCase().replaceAll("_", " "))
@@ -592,9 +646,15 @@ function Timeline({ plan, actions, task }) {
     const name =
       typeof step === "string"
         ? step
-        : step?.name || step?.step || step?.action || `Step ${index + 1}`;
+        : step?.name ||
+          step?.step ||
+          step?.action ||
+          `Step ${index + 1}`;
 
-    const normalizedName = String(name).toLowerCase().replaceAll("_", " ");
+    const normalizedName = String(name)
+      .toLowerCase()
+      .replaceAll("_", " ");
+
     const stepStatus = typeof step === "object" ? step.status : null;
 
     const completed =
@@ -628,7 +688,10 @@ function Timeline({ plan, actions, task }) {
           <span className="eyebrow">EXECUTION TRACE</span>
           <h3>What the agent did</h3>
         </div>
-        <span className="small-count">{actions.length} recorded actions</span>
+
+        <span className="small-count">
+          {actions.length} recorded actions
+        </span>
       </div>
 
       {events.length === 0 ? (
@@ -655,7 +718,9 @@ function Timeline({ plan, actions, task }) {
                 <p>{event.detail}</p>
               </div>
 
-              <span className="timeline-status">{humanize(event.state)}</span>
+              <span className="timeline-status">
+                {humanize(event.state)}
+              </span>
             </div>
           ))}
         </div>
@@ -663,8 +728,8 @@ function Timeline({ plan, actions, task }) {
 
       <p className="timeline-note">
         <Activity size={15} />
-        Planned steps are distinguished from steps with recorded execution
-        evidence.
+        Planned steps are distinguished from steps with recorded
+        execution evidence.
       </p>
     </section>
   );
@@ -676,7 +741,7 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
 
   const [goal, setGoal] = useState("");
-  const [filePath, setFilePath] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -688,7 +753,10 @@ export default function App() {
   const loadTasks = useCallback(
     async (preferredId = null) => {
       try {
-        const response = await apiRequest("/api/v1/tasks?limit=100");
+        const response = await apiRequest(
+          "/api/v1/tasks?limit=100"
+        );
+
         const items = Array.isArray(response)
           ? response
           : response.items || [];
@@ -701,7 +769,10 @@ export default function App() {
           selectedId ||
           (items.length ? items[0].task_id : null);
 
-        if (targetId && items.some((task) => task.task_id === targetId)) {
+        if (
+          targetId &&
+          items.some((task) => task.task_id === targetId)
+        ) {
           setSelectedId(targetId);
 
           const detail = await apiRequest(
@@ -755,15 +826,20 @@ export default function App() {
 
     refreshSelectedTask();
 
-    const timer = window.setInterval(refreshSelectedTask, 2500);
+    const timer = window.setInterval(
+      refreshSelectedTask,
+      2500
+    );
 
     return () => window.clearInterval(timer);
   }, [selectedId, refreshSelectedTask]);
 
-  const metrics = useMemo(() => {
-    return {
+  const metrics = useMemo(
+    () => ({
       total: tasks.length,
-      completed: tasks.filter((task) => task.status === "completed").length,
+      completed: tasks.filter(
+        (task) => task.status === "completed"
+      ).length,
       active: tasks.filter(
         (task) =>
           !TERMINAL_STATUSES.has(task.status) &&
@@ -775,8 +851,9 @@ export default function App() {
           task.approval_required &&
           task.approval_status === "pending"
       ).length,
-    };
-  }, [tasks]);
+    }),
+    [tasks]
+  );
 
   async function createTask(event) {
     event.preventDefault();
@@ -786,13 +863,68 @@ export default function App() {
       return;
     }
 
+    const isInvoice = getGoalType(goal) === "invoice";
+
+    if (isInvoice && !selectedFile) {
+      setError("Please attach an invoice image before submitting this task.");
+      return;
+    }
+
     setCreating(true);
     setError("");
     setNotice("");
 
     try {
+      let uploadedFilePath = null;
+
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+
+        // Do not set Content-Type for FormData. The browser adds
+        // the multipart boundary automatically.
+        const uploadResponse = await fetch(
+          `${API_BASE}/api/v1/uploads/invoice`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        const contentType =
+          uploadResponse.headers.get("content-type") || "";
+
+        const uploadPayload = contentType.includes("application/json")
+          ? await uploadResponse.json()
+          : await uploadResponse.text();
+
+        if (!uploadResponse.ok) {
+          const detail =
+            typeof uploadPayload === "object"
+              ? uploadPayload.detail ||
+                JSON.stringify(uploadPayload)
+              : uploadPayload;
+
+          throw new Error(
+            detail ||
+              `Invoice upload failed: ${uploadResponse.status}`
+          );
+        }
+
+        uploadedFilePath = uploadPayload.file_path;
+
+        if (!uploadedFilePath) {
+          throw new Error(
+            "The upload endpoint did not return file_path."
+          );
+        }
+      }
+
       const body = { goal: goal.trim() };
-      if (filePath.trim()) body.file_path = filePath.trim();
+
+      if (uploadedFilePath) {
+        body.file_path = uploadedFilePath;
+      }
 
       const created = await apiRequest("/api/v1/tasks", {
         method: "POST",
@@ -800,7 +932,11 @@ export default function App() {
       });
 
       setGoal("");
-      setFilePath("");
+      setSelectedFile(null);
+
+      const fileInput = document.getElementById("invoice-file");
+      if (fileInput) fileInput.value = "";
+
       setNotice("Task submitted. Monitoring execution.");
 
       await loadTasks(created.task_id);
@@ -820,17 +956,24 @@ export default function App() {
 
     try {
       const response = await apiRequest(
-        `/api/v1/tasks/${encodeURIComponent(selectedTask.task_id)}/${action}`,
+        `/api/v1/tasks/${encodeURIComponent(
+          selectedTask.task_id
+        )}/${action}`,
         {
           method: "POST",
           body: JSON.stringify({}),
         }
       );
 
-      setNotice(response.message || `Task ${action} request completed.`);
+      setNotice(
+        response.message || `Task ${action} request completed.`
+      );
+
       await loadTasks(selectedTask.task_id);
     } catch (requestError) {
-      setError(`Could not ${action} task: ${requestError.message}`);
+      setError(
+        `Could not ${action} task: ${requestError.message}`
+      );
     } finally {
       setActionBusy(false);
     }
@@ -844,6 +987,7 @@ export default function App() {
       const detail = await apiRequest(
         `/api/v1/tasks/${encodeURIComponent(taskId)}`
       );
+
       setSelectedTask(detail);
     } catch (requestError) {
       setError(requestError.message);
@@ -866,6 +1010,7 @@ export default function App() {
           <span className="brand-mark">
             <Zap size={22} />
           </span>
+
           <div>
             <strong>Operator</strong>
             <small>Agent workspace</small>
@@ -917,7 +1062,8 @@ export default function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="breadcrumbs">
-            Workspace <ChevronRight size={14} /> <strong>Overview</strong>
+            Workspace <ChevronRight size={14} />{" "}
+            <strong>Overview</strong>
           </div>
 
           <div className="topbar-right">
@@ -925,6 +1071,7 @@ export default function App() {
               <span />
               Auto-refresh on
             </span>
+
             <button
               className="icon-button"
               type="button"
@@ -939,9 +1086,13 @@ export default function App() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <span className="eyebrow">AGENT CONTROL CENTER</span>
+              <span className="eyebrow">
+                AGENT CONTROL CENTER
+              </span>
               <h1>Operations overview</h1>
-              <p>Launch tasks, follow execution, and review outcomes.</p>
+              <p>
+                Launch tasks, follow execution, and review outcomes.
+              </p>
             </div>
 
             <span className="updated-label">
@@ -986,6 +1137,7 @@ export default function App() {
               icon={ListTodo}
               tone="blue"
             />
+
             <MetricCard
               label="Completed"
               value={metrics.completed}
@@ -993,6 +1145,7 @@ export default function App() {
               icon={CheckCircle2}
               tone="green"
             />
+
             <MetricCard
               label="In progress"
               value={metrics.active}
@@ -1000,6 +1153,7 @@ export default function App() {
               icon={Activity}
               tone="purple"
             />
+
             <MetricCard
               label="Needs approval"
               value={metrics.approvals}
@@ -1014,14 +1168,18 @@ export default function App() {
               <span className="section-icon">
                 <Plus size={19} />
               </span>
+
               <div>
                 <h2>Create a task</h2>
-                <p>Describe the outcome you want the agent to achieve.</p>
+                <p>
+                  Describe the outcome you want the agent to achieve.
+                </p>
               </div>
             </div>
 
             <form onSubmit={createTask}>
               <label htmlFor="goal">Task instruction</label>
+
               <textarea
                 id="goal"
                 value={goal}
@@ -1033,17 +1191,26 @@ export default function App() {
 
               <div className="form-bottom">
                 <div className="file-path-field">
-                  <label htmlFor="file-path">
-                    Backend file path <span>(optional)</span>
+                  <label htmlFor="invoice-file">
+                    Attach invoice <span>(optional)</span>
                   </label>
+
                   <input
-                    id="file-path"
-                    value={filePath}
-                    onChange={(event) => setFilePath(event.target.value)}
-                    placeholder="C:\path\to\document.png"
+                    id="invoice-file"
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.tif,.tiff,image/png,image/jpeg,image/tiff"
+                    onChange={(event) =>
+                      setSelectedFile(
+                        event.target.files?.[0] || null
+                      )
+                    }
                   />
+
                   <span className="field-hint">
-                    The path must be accessible to the backend server.
+                    Upload an invoice image for OCR processing.
+                    {selectedFile
+                      ? ` Selected: ${selectedFile.name}`
+                      : ""}
                   </span>
                 </div>
 
@@ -1071,6 +1238,7 @@ export default function App() {
                   <h2>Task history</h2>
                   <p>Recent agent executions</p>
                 </div>
+
                 <button
                   className="secondary-button"
                   type="button"
@@ -1096,7 +1264,9 @@ export default function App() {
                   {tasks.map((task) => (
                     <button
                       className={`task-row ${
-                        selectedId === task.task_id ? "selected" : ""
+                        selectedId === task.task_id
+                          ? "selected"
+                          : ""
                       }`}
                       key={task.task_id}
                       type="button"
@@ -1105,7 +1275,9 @@ export default function App() {
                       <span className="task-row-icon">
                         {task.status === "completed" ? (
                           <CheckCircle2 size={18} />
-                        ) : ["failed", "rejected"].includes(task.status) ? (
+                        ) : ["failed", "rejected"].includes(
+                            task.status
+                          ) ? (
                           <XCircle size={18} />
                         ) : (
                           <Activity size={18} />
@@ -1142,18 +1314,22 @@ export default function App() {
                       <h2>{selectedTask.goal}</h2>
                       <code>{selectedTask.task_id}</code>
                     </div>
+
                     <StatusPill status={selectedTask.status} />
                   </div>
 
                   {pendingApproval && (
                     <div className="approval-banner">
                       <ShieldCheck size={23} />
+
                       <div className="approval-copy">
                         <strong>Human approval required</strong>
                         <p>
-                          Review the outcome and evidence before proceeding.
+                          Review the outcome and evidence before
+                          proceeding.
                         </p>
                       </div>
+
                       <div className="approval-actions">
                         <button
                           className="reject-button"
@@ -1164,6 +1340,7 @@ export default function App() {
                           <X size={15} />
                           Reject
                         </button>
+
                         <button
                           className="approve-button"
                           type="button"
@@ -1171,7 +1348,10 @@ export default function App() {
                           onClick={() => runApprovalAction("approve")}
                         >
                           {actionBusy ? (
-                            <LoaderCircle className="spin" size={15} />
+                            <LoaderCircle
+                              className="spin"
+                              size={15}
+                            />
                           ) : (
                             <Check size={15} />
                           )}
@@ -1186,14 +1366,17 @@ export default function App() {
                       <span>Plan steps</span>
                       <strong>{plan.length}</strong>
                     </div>
+
                     <div>
                       <span>Recorded actions</span>
                       <strong>{actions.length}</strong>
                     </div>
+
                     <div>
                       <span>Retries</span>
                       <strong>{selectedTask.retry_count ?? 0}</strong>
                     </div>
+
                     <div>
                       <span>Duration</span>
                       <strong>
@@ -1216,11 +1399,13 @@ export default function App() {
                   <section className="technical-details">
                     <div className="panel-heading">
                       <div>
-                        <span className="eyebrow">FOR DEBUGGING</span>
+                        <span className="eyebrow">
+                          FOR DEBUGGING
+                        </span>
                         <h3>Technical details</h3>
                         <p>
-                          Expand a section to inspect the underlying agent
-                          trace.
+                          Expand a section to inspect the underlying
+                          agent trace.
                         </p>
                       </div>
                     </div>
@@ -1231,31 +1416,37 @@ export default function App() {
                         icon={ListTodo}
                         data={plan}
                       />
+
                       <EvidencePanel
                         title="Tool actions"
                         icon={Zap}
                         data={actions}
                       />
+
                       <EvidencePanel
                         title="Observations"
                         icon={Activity}
                         data={observations}
                       />
+
                       <EvidencePanel
                         title="Verification data"
                         icon={ShieldCheck}
                         data={selectedTask.verification_result}
                       />
+
                       <EvidencePanel
                         title="Errors"
                         icon={AlertCircle}
                         data={errors}
                       />
+
                       <EvidencePanel
                         title="Recovery action"
                         icon={ArrowDownRight}
                         data={selectedTask.recovery_action}
                       />
+
                       <EvidencePanel
                         title="Raw final result"
                         icon={FileText}
