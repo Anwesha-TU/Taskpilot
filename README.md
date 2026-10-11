@@ -227,8 +227,7 @@ Recovery, verification, approval, and persistence behavior must be evaluated for
 
 ## License
 
-Add an appropriate license before distributing the project as open source.
-
+No license required
 ---
 
 **TaskPilot — Plan. Execute. Verify.**
