@@ -1,4 +1,3 @@
-
 import re
 from typing import Any, Dict, Optional
 
@@ -7,7 +6,12 @@ class RequirementExtractor:
     """Extract structured constraints from natural-language task goals."""
 
     CATEGORY_KEYWORDS = {
-        "laptop": ["laptop", "laptops", "notebook computer", "notebook computers"],
+        "laptop": [
+            "laptop",
+            "laptops",
+            "notebook computer",
+            "notebook computers",
+        ],
         "protein_bar": ["protein bar", "protein bars"],
         "snack": ["snack", "snacks"],
         "beverage": ["beverage", "beverages", "drink", "drinks"],
@@ -15,6 +19,7 @@ class RequirementExtractor:
     }
 
     def extract(self, goal: str) -> Dict[str, Any]:
+        """Extract supported constraints from a natural-language goal."""
         if not isinstance(goal, str):
             return {}
 
@@ -92,29 +97,42 @@ class RequirementExtractor:
 
             value = self._parse_number(match.group(1))
 
-            if any(
-                phrase in text
-                for phrase in (
-                    "under",
-                    "below",
-                    "less than",
-                    "maximum",
-                    "max",
-                    "within",
-                    "up to",
-                    "upto",
-                    "or less",
+            if (
+                any(
+                    phrase in text
+                    for phrase in (
+                        "under",
+                        "below",
+                        "less than",
+                        "maximum",
+                        "max",
+                        "within",
+                        "up to",
+                        "upto",
+                        "or less",
+                    )
                 )
-            ) or "₹" in text or "rupee" in text or " rs" in text:
+                or "₹" in text
+                or "rupee" in text
+                or " rs" in text
+            ):
                 return value
 
         return None
 
     def _extract_min_price(self, text: str) -> Optional[float]:
+        """Extract minimum price without mistaking protein/RAM numbers for prices."""
         number = self._number_pattern()
+
         patterns = [
-            rf"\b(?:above|over|more than|at least|minimum|min)\s*₹?\s*({number})",
-            rf"₹\s*({number})\s*(?:or more|and above)",
+            # Examples: above ₹500, at least ₹1,000, minimum ₹750
+            rf"\b(?:above|over|more than|at least|minimum|min)\s*₹\s*({number})(?![\w.])",
+
+            # Examples: above 500 rupees, at least 750 rs.
+            rf"\b(?:above|over|more than|at least|minimum|min)\s*({number})\s*(?:rupees|rs\.?)\b",
+
+            # Examples: ₹500 or more, ₹1,000 and above
+            rf"₹\s*({number})\s*(?:or more|and above)\b",
         ]
 
         for pattern in patterns:
