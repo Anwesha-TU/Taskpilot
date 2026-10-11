@@ -228,6 +228,5 @@ Recovery, verification, approval, and persistence behavior must be evaluated for
 ## License
 
 No license required
----
 
 **TaskPilot — Plan. Execute. Verify.**
